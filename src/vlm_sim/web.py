@@ -100,6 +100,9 @@ APP_CSS = """
 .key-hint { color: #91a0b8; text-align: center; font-size: 12px; margin: 8px 0 2px; }
 .vlm-output { min-height: 285px; padding: 12px; border-radius: 12px; background: #09111c; border: 1px solid #223149; }
 .vlm-status { color: var(--muted); min-height: 28px; }
+#autonomy-status { min-height: 76px; padding: 14px 16px; display: flex; align-items: center;
+  border: 1px solid #273449; border-radius: 12px; background: #0c1420; }
+#autonomy-status .progress-text { white-space: normal !important; }
 .oracle-note { color: #8fa0ba; font-size: 12px; }
 .footer-note { color: #73839d; text-align: center; font-size: 12px; margin: 10px 0 2px; }
 """
@@ -524,6 +527,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             autonomy_status = gr.Markdown(
                                 "Ready to start an autonomous policy.",
                                 elem_classes="vlm-status",
+                                elem_id="autonomy-status",
                             )
                             policy_trace = gr.Markdown(
                                 "### Autonomous Policy Trace\nNo autonomous run yet.",
