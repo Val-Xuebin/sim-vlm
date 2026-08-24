@@ -472,18 +472,6 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             "The model sees RGB pixels only; oracle metadata is shown separately. "
                             "Model IDs may be selected from the list or entered directly."
                         )
-                        preset = gr.Dropdown(
-                            list(PROMPTS), value="Scene understanding", label="Analysis preset"
-                        )
-                        prompt = gr.Textbox(value=DEFAULT_PROMPT, label="Prompt", lines=6)
-                        analyze_button = gr.Button("Analyze Current Observation", variant="primary")
-                        vlm_status = gr.Markdown(
-                            "Reset a scene, then analyze the current step.", elem_classes="vlm-status"
-                        )
-                        vlm_output = gr.Markdown(
-                            "### Awaiting analysis\nThe result will appear here without blocking navigation history.",
-                            elem_classes="vlm-output",
-                        )
                         with gr.Accordion("Autonomous VLM Policy", open=False):
                             vlm_control = gr.Checkbox(
                                 label="Enable VLM Control",
@@ -518,6 +506,19 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                                 "### Autonomous Policy Trace\nNo autonomous run yet.",
                                 elem_classes="vlm-output",
                             )
+                        gr.Markdown("#### Single Observation Analysis")
+                        preset = gr.Dropdown(
+                            list(PROMPTS), value="Scene understanding", label="Analysis preset"
+                        )
+                        prompt = gr.Textbox(value=DEFAULT_PROMPT, label="Prompt", lines=6)
+                        analyze_button = gr.Button("Analyze Current Observation", variant="primary")
+                        vlm_status = gr.Markdown(
+                            "Reset a scene, then analyze the current step.", elem_classes="vlm-status"
+                        )
+                        vlm_output = gr.Markdown(
+                            "### Awaiting analysis\nThe result will appear here without blocking navigation history.",
+                            elem_classes="vlm-output",
+                        )
 
         with gr.Column(elem_classes="panel"):
             with gr.Tabs():
