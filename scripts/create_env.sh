@@ -4,7 +4,25 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_PREFIX="${SIM_VLM_ENV_PREFIX:-$PROJECT_DIR/.venv}"
 TMP_ROOT="${SIM_VLM_TMP_ROOT:-$PROJECT_DIR/.tmp}"
-BOOTSTRAP_PYTHON="${SIM_VLM_BOOTSTRAP_PYTHON:-/base/mambaforge/bin/python}"
+if [[ -n "${SIM_VLM_BOOTSTRAP_PYTHON:-}" ]]; then
+  BOOTSTRAP_PYTHON="$SIM_VLM_BOOTSTRAP_PYTHON"
+elif [[ -x /base/mambaforge/bin/python ]]; then
+  BOOTSTRAP_PYTHON=/base/mambaforge/bin/python
+else
+  BOOTSTRAP_PYTHON="$(command -v python3)"
+fi
+
+if [[ -z "$BOOTSTRAP_PYTHON" || ! -x "$BOOTSTRAP_PYTHON" ]]; then
+  echo "ERROR: Python 3.10 or 3.11 is required." >&2
+  exit 2
+fi
+
+python_minor="$($BOOTSTRAP_PYTHON -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+if [[ "$python_minor" != "3.10" && "$python_minor" != "3.11" ]]; then
+  echo "ERROR: Python 3.10 or 3.11 is required; found $python_minor." >&2
+  echo "Set SIM_VLM_BOOTSTRAP_PYTHON to a compatible interpreter." >&2
+  exit 2
+fi
 
 mkdir -p "$TMP_ROOT" "$PROJECT_DIR/.cache/huggingface" "$PROJECT_DIR/.cache/torch"
 if [[ ! -x "$ENV_PREFIX/bin/python" ]]; then
