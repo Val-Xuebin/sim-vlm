@@ -578,6 +578,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             vlm_control = gr.Checkbox(
                                 label="Enable VLM Control",
                                 info="Allow the selected VLM to execute simulator actions.",
+                                value=True,
                             )
                             autonomy_task = gr.Textbox(
                                 label="Task",
