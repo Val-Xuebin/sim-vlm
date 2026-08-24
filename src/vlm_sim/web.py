@@ -17,6 +17,13 @@ if (PROJECT_HF_HOME / "hub" / "models--Qwen--Qwen3-VL-2B-Instruct").is_dir():
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 from .backends import VLMBackend, make_backend
+from .autonomy import (
+    PolicyDecision,
+    build_policy_prompt,
+    parse_policy_decision,
+    policy_trace_markdown,
+    should_stop,
+)
 from .debugger import SimulatorDebugger
 
 
@@ -207,6 +214,8 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
     model_options = load_model_options()
     initial_model = model or model_options[initial_backend][0]
     backend_pool = BackendPool()
+    autonomy_stop = threading.Event()
+    autonomy_running = threading.Event()
 
     def session_payload(selected_object: str | None = None, elapsed_ms: float = 0.0):
         if debugger.observation is None:
@@ -236,11 +245,15 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
         )
 
     def reset_scene(scene: str):
+        if autonomy_running.is_set():
+            raise gr.Error("Stop VLM Control before resetting the scene.")
         started = time.perf_counter()
         debugger.reset(scene)
         return session_payload(elapsed_ms=(time.perf_counter() - started) * 1000)
 
     def take_action(action: str, selected_object: str | None):
+        if autonomy_running.is_set():
+            raise gr.Error("Stop VLM Control before using Manual Policy.")
         if debugger.simulator is None:
             raise gr.Error("Reset a scene before taking an action.")
         started = time.perf_counter()
@@ -280,6 +293,102 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
 
     def select_prompt(name: str):
         return PROMPTS.get(name, DEFAULT_PROMPT)
+
+    def stop_autonomy():
+        autonomy_stop.set()
+        return "Stop requested — waiting for the current VLM inference to finish."
+
+    def run_autonomy(
+        enabled: bool,
+        task: str,
+        threshold: float,
+        max_steps: float,
+        selected_backend: str,
+        selected_model: str,
+        selected_object: str | None,
+    ):
+        if not enabled:
+            raise gr.Error("Enable VLM Control first.")
+        if not task.strip():
+            raise gr.Error("Enter a task for the autonomous policy.")
+        if debugger.observation is None:
+            raise gr.Error("Reset a scene before starting VLM Control.")
+        if autonomy_running.is_set():
+            raise gr.Error("VLM Control is already running.")
+        selected_model = selected_model.strip()
+        if not selected_model:
+            raise gr.Error("Select or enter a model first.")
+
+        autonomy_stop.clear()
+        autonomy_running.set()
+        memory: list[PolicyDecision] = []
+        limit = min(50, max(1, int(max_steps)))
+        threshold = min(1.0, max(0.0, float(threshold)))
+        try:
+            for policy_step in range(limit):
+                if autonomy_stop.is_set():
+                    stop_reason = "stopped by user"
+                    payload = list(session_payload(selected_object))
+                    payload[-1] = f"VLM Control stopped before policy step `{policy_step}`."
+                    yield (*payload, memory[-1].raw if memory else "", policy_trace_markdown(memory, stop_reason))
+                    return
+
+                image, metadata, simulator_step = debugger.analysis_snapshot()
+                policy_prompt = build_policy_prompt(task.strip(), memory, threshold)
+                started = time.perf_counter()
+                try:
+                    instance, loaded_now = backend_pool.get(
+                        selected_backend, selected_model, metadata
+                    )
+                    raw = instance.describe(image, policy_prompt)
+                    decision = parse_policy_decision(raw)
+                except Exception as exc:
+                    stop_reason = f"policy error: {type(exc).__name__}: {exc}"
+                    payload = list(session_payload(selected_object))
+                    payload[-1] = f"VLM Control failed at simulator step `{simulator_step}`."
+                    yield (
+                        *payload,
+                        f"### VLM policy error\n`{type(exc).__name__}: {exc}`",
+                        policy_trace_markdown(memory, stop_reason),
+                    )
+                    return
+
+                memory.append(decision)
+                elapsed = time.perf_counter() - started
+                stop_reason = should_stop(decision, threshold)
+                if autonomy_stop.is_set():
+                    stop_reason = "stopped by user"
+                elif stop_reason is None and policy_step + 1 >= limit:
+                    stop_reason = f"maximum policy steps reached ({limit})"
+
+                if stop_reason is None:
+                    action_observation = debugger.step(decision.action)
+                    action_success = bool(
+                        action_observation.metadata.get("lastActionSuccess", False)
+                    )
+                    action_error = action_observation.metadata.get("errorMessage") or ""
+                    decision.action_result = (
+                        "executed successfully"
+                        if action_success
+                        else f"failed: {action_error or 'unknown simulator error'}"
+                    )
+                payload = list(session_payload(selected_object))
+                current_step = max(0, len(debugger.history) - 1)
+                load_note = " · model loaded" if loaded_now else ""
+                payload[-1] = (
+                    f"VLM Control policy step `{policy_step + 1}/{limit}` · simulator step "
+                    f"`{current_step}` · confidence `{decision.confidence:.2f}` · "
+                    f"`{elapsed:.2f}s`{load_note}."
+                )
+                yield (
+                    *payload,
+                    decision.raw,
+                    policy_trace_markdown(memory, stop_reason),
+                )
+                if stop_reason is not None:
+                    return
+        finally:
+            autonomy_running.clear()
 
     theme = gr.themes.Base(
         primary_hue="cyan",
@@ -375,6 +484,40 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             "### Awaiting analysis\nThe result will appear here without blocking navigation history.",
                             elem_classes="vlm-output",
                         )
+                        with gr.Accordion("Autonomous VLM Policy", open=False):
+                            vlm_control = gr.Checkbox(
+                                label="Enable VLM Control",
+                                info="Allow the selected VLM to execute simulator actions.",
+                            )
+                            autonomy_task = gr.Textbox(
+                                label="Task",
+                                placeholder="Example: Find evidence that a mug is visible.",
+                                lines=2,
+                            )
+                            with gr.Row():
+                                confidence_threshold = gr.Slider(
+                                    0.5,
+                                    1.0,
+                                    value=0.85,
+                                    step=0.05,
+                                    label="Stop confidence",
+                                )
+                                max_policy_steps = gr.Number(
+                                    value=8,
+                                    minimum=1,
+                                    maximum=50,
+                                    precision=0,
+                                    label="Max steps",
+                                )
+                            with gr.Row():
+                                start_autonomy = gr.Button(
+                                    "Start VLM Control", variant="primary"
+                                )
+                                stop_autonomy_button = gr.Button("Stop")
+                            policy_trace = gr.Markdown(
+                                "### Autonomous Policy Trace\nNo autonomous run yet.",
+                                elem_classes="vlm-output",
+                            )
 
         with gr.Column(elem_classes="panel"):
             with gr.Tabs():
@@ -456,6 +599,31 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             [backend_selector, model_selector, prompt],
             [vlm_output, vlm_status],
             api_name="analyze_vlm",
+            show_progress="hidden",
+        )
+        autonomy_outputs = [*outputs, vlm_output, policy_trace]
+        start_autonomy.click(
+            run_autonomy,
+            [
+                vlm_control,
+                autonomy_task,
+                confidence_threshold,
+                max_policy_steps,
+                backend_selector,
+                model_selector,
+                visible_objects,
+            ],
+            autonomy_outputs,
+            api_name="run_autonomous_policy",
+            show_progress="hidden",
+            concurrency_limit=1,
+            concurrency_id="autonomous_policy",
+        )
+        stop_autonomy_button.click(
+            stop_autonomy,
+            outputs=vlm_status,
+            api_name="stop_autonomous_policy",
+            queue=False,
             show_progress="hidden",
         )
 

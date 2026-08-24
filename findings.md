@@ -50,3 +50,11 @@
 - `transformers` supports compatible Hugging Face image-text auto models; `qwen` remains a CLI alias. `openai` supports remote OpenAI-compatible vision endpoints, while `metadata` remains the no-GPU smoke test.
 - Regression command: `HF_HOME=$PWD/.cache/huggingface HF_HUB_OFFLINE=1 .venv/bin/vlm-sim ask outputs/smoke-linux64/frame.png --backend transformers --model Qwen/Qwen3-VL-2B-Instruct --prompt "Name the room type in one short phrase."`.
 - Result: `kitchen`. UI configuration, CLI alias, callback registration, Python compilation, and pytest (`1 passed`) also succeeded.
+
+## 2026-08-25 autonomous VLM policy
+
+- Archived stable commit `e057197` as Git tag `pre-autonomous-vlm-20260825` and workspace snapshot `archived/vlm-sim-demo-pre-autonomous-20260825/` before implementation.
+- Added an opt-in task policy that loops over current RGB observation → structured VLM JSON → validated AI2-THOR action → new observation. Up to eight compressed prior decisions are included in each prompt.
+- Stop conditions: configured confidence threshold, `Stop`, `blocked`, user cancellation, policy error, or a hard maximum of 50 steps. Scene reset and manual actions are rejected while the loop is active.
+- Metadata end-to-end API validation reset `FloorPlan1`, returned final observation and trace, and stopped safely on its non-policy response.
+- Qwen3-VL-2B end-to-end API validation task: `Determine whether a refrigerator is visible.`, threshold `0.75`, maximum `2` steps. First inference including model load took 14.28 seconds; output reported the refrigerator visible, confidence `0.95`, status `completed`, action `Stop`, and the loop stopped at the threshold without moving.

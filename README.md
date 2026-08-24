@@ -45,6 +45,20 @@ ssh -L 7860:localhost:7860 <user>@<server>
 
 Open `http://localhost:7860`. Select **Backend** and **Model** in VLM Copilot. Models load only when **Analyze Current Observation** is clicked and are reused by backend/model pair.
 
+## Autonomous VLM Policy
+
+Reset a scene, open **VLM Copilot → Autonomous VLM Policy**, enter a task, enable VLM Control, and click **Start VLM Control**.
+
+At each policy step the VLM receives:
+
+- the current RGB observation;
+- the task and confidence threshold;
+- a compact memory of prior observations, new information, actions, and confidence values.
+
+The VLM returns a strict JSON decision. The simulator executes its action and supplies the new observation on the next step. The run stops when the confidence threshold is reached, the model selects `Stop`, reports `blocked`, reaches the maximum step count, or the user clicks **Stop**. The final RGB observation, raw VLM output, and complete policy trace remain visible.
+
+Manual actions and scene reset are rejected while VLM Control is active. Keep a finite maximum step count: model actions and confidence are not guaranteed to be correct.
+
 ## Model backends
 
 - `metadata`: simulator-only smoke test; no pixel inference or GPU required.
