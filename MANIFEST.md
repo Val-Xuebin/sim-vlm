@@ -1,5 +1,6 @@
 # Manifest
 
+- `ROADMAP.md`: planned benchmark and streaming/codec VLM evaluation work.
 - `src/vlm_sim/simulator.py`: AI2-THOR lifecycle, observation, metadata export.
 - `src/vlm_sim/debugger.py`: persistent simulator session, navigation history, oracle inspection, map rendering, and immutable VLM snapshots.
 - `src/vlm_sim/backends.py`: local Transformers, OpenAI-compatible, and metadata backends.
