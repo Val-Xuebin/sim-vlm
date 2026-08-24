@@ -103,6 +103,8 @@ APP_CSS = """
 #autonomy-status { min-height: 76px; padding: 14px 16px; display: flex; align-items: center;
   border: 1px solid #273449; border-radius: 12px; background: #0c1420; }
 #autonomy-status .progress-text { white-space: normal !important; }
+#policy-output-contract textarea { height: 260px !important; max-height: 260px !important;
+  overflow-y: auto !important; resize: none !important; }
 .oracle-note { color: #8fa0ba; font-size: 12px; }
 .footer-note { color: #73839d; text-align: center; font-size: 12px; margin: 10px 0 2px; }
 """
@@ -589,6 +591,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                                     lines=14,
                                     interactive=False,
                                     show_copy_button=True,
+                                    elem_id="policy-output-contract",
                                 )
                             with gr.Row():
                                 confidence_threshold = gr.Slider(
