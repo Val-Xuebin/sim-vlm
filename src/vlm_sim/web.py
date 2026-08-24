@@ -18,6 +18,7 @@ if (PROJECT_HF_HOME / "hub" / "models--Qwen--Qwen3-VL-2B-Instruct").is_dir():
 
 from .backends import VLMBackend, make_backend
 from .autonomy import (
+    POLICY_OUTPUT_CONTRACT,
     PolicyDecision,
     build_policy_prompt,
     parse_policy_decision,
@@ -482,6 +483,14 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                                 placeholder="Example: Find evidence that a mug is visible.",
                                 lines=2,
                             )
+                            with gr.Accordion("VLM Output Contract", open=False):
+                                gr.Textbox(
+                                    value=POLICY_OUTPUT_CONTRACT,
+                                    label="Required format and supported actions",
+                                    lines=14,
+                                    interactive=False,
+                                    show_copy_button=True,
+                                )
                             with gr.Row():
                                 confidence_threshold = gr.Slider(
                                     0.5,

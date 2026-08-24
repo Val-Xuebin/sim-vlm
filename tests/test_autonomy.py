@@ -1,6 +1,12 @@
 import pytest
 
-from vlm_sim.autonomy import build_policy_prompt, parse_policy_decision, should_stop
+from vlm_sim.autonomy import (
+    POLICY_OUTPUT_CONTRACT,
+    SUPPORTED_ACTIONS,
+    build_policy_prompt,
+    parse_policy_decision,
+    should_stop,
+)
 
 
 def test_parse_fenced_policy_and_threshold_stop():
@@ -24,6 +30,8 @@ def test_prompt_contains_task_and_memory():
     assert "find a mug" in prompt
     assert "RotateRight" in prompt
     assert "current egocentric RGB observation" in prompt
+    assert POLICY_OUTPUT_CONTRACT in prompt
+    assert all(action in prompt for action in SUPPORTED_ACTIONS)
 
 
 def test_rejects_unsupported_action():

@@ -57,6 +57,8 @@ At each policy step the VLM receives:
 
 The VLM returns a strict JSON decision. The simulator executes its action and supplies the new observation on the next step. The run stops when the confidence threshold is reached, the model selects `Stop`, reports `blocked`, reaches the maximum step count, or the user clicks **Stop**. The final RGB observation, raw VLM output, and complete policy trace remain visible.
 
+The collapsible **VLM Output Contract** shows the exact JSON schema and every action currently executable by the loop: `MoveAhead`, `MoveBack`, `MoveLeft`, `MoveRight`, `RotateLeft`, `RotateRight`, `LookUp`, `LookDown`, `Crouch`, `Stand`, and `Stop`. The same contract is injected into every policy prompt and enforced by the parser. AI2-THOR interaction actions requiring arguments such as `objectId` are not yet exposed by this controller.
+
 Manual actions and scene reset are rejected while VLM Control is active. Keep a finite maximum step count: model actions and confidence are not guaranteed to be correct.
 
 ## Model backends

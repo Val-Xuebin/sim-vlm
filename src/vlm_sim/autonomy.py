@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-ALLOWED_ACTIONS = {
+SUPPORTED_ACTIONS = (
     "MoveAhead",
     "MoveBack",
     "MoveLeft",
@@ -18,7 +18,24 @@ ALLOWED_ACTIONS = {
     "Crouch",
     "Stand",
     "Stop",
-}
+)
+ALLOWED_ACTIONS = set(SUPPORTED_ACTIONS)
+
+POLICY_OUTPUT_CONTRACT = f"""Return only one JSON object:
+{{
+  "observation": "what is visually grounded in the current RGB frame",
+  "new_information": "evidence not already present in policy memory",
+  "action": "one exact action from the supported list",
+  "confidence": 0.0,
+  "task_status": "exploring | completed | blocked",
+  "rationale": "brief reason for the action and confidence"
+}}
+
+Supported AI2-THOR actions in this control loop:
+{", ".join(SUPPORTED_ACTIONS)}
+
+confidence is a number from 0 to 1 measuring whether accumulated visual evidence is sufficient
+to complete the task. Do not include Markdown fences or text outside the JSON object."""
 
 
 @dataclass
@@ -54,13 +71,9 @@ def build_policy_prompt(task: str, memory: list[PolicyDecision], threshold: floa
         "Previous compressed observations and decisions:\n"
         f"{json.dumps(history, ensure_ascii=False)}\n\n"
         "Seek a new viewpoint when important task evidence is unseen or uncertain. Do not claim "
-        "hidden information. Return ONLY one JSON object with keys: observation, "
-        "new_information, action, confidence, task_status, rationale. confidence must be a "
-        "number from 0 to 1 expressing confidence that the task can be completed from the "
-        "accumulated visual evidence. task_status must be exploring, completed, or blocked. action must "
-        "be exactly one of MoveAhead, MoveBack, MoveLeft, MoveRight, RotateLeft, RotateRight, "
-        "LookUp, LookDown, Crouch, Stand, Stop. Use Stop when the task is completed with "
-        "sufficient confidence or no safe useful action remains."
+        "hidden information. Use Stop when the task is completed with sufficient confidence or "
+        "no safe useful action remains.\n\n"
+        f"{POLICY_OUTPUT_CONTRACT}"
     )
 
 
