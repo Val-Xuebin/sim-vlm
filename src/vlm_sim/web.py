@@ -330,8 +330,15 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                 if autonomy_stop.is_set():
                     stop_reason = "stopped by user"
                     payload = list(session_payload(selected_object))
-                    payload[-1] = f"VLM Control stopped before policy step `{policy_step}`."
-                    yield (*payload, memory[-1].raw if memory else "", policy_trace_markdown(memory, stop_reason))
+                    autonomy_message = (
+                        f"VLM Control stopped before policy step `{policy_step}`."
+                    )
+                    yield (
+                        *payload,
+                        memory[-1].raw if memory else "",
+                        policy_trace_markdown(memory, stop_reason),
+                        autonomy_message,
+                    )
                     return
 
                 image, metadata, simulator_step = debugger.analysis_snapshot()
@@ -346,11 +353,11 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                 except Exception as exc:
                     stop_reason = f"policy error: {type(exc).__name__}: {exc}"
                     payload = list(session_payload(selected_object))
-                    payload[-1] = f"VLM Control failed at simulator step `{simulator_step}`."
                     yield (
                         *payload,
                         f"### VLM policy error\n`{type(exc).__name__}: {exc}`",
                         policy_trace_markdown(memory, stop_reason),
+                        f"VLM Control failed at simulator step `{simulator_step}`.",
                     )
                     return
 
@@ -376,7 +383,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                 payload = list(session_payload(selected_object))
                 current_step = max(0, len(debugger.history) - 1)
                 load_note = " · model loaded" if loaded_now else ""
-                payload[-1] = (
+                autonomy_message = (
                     f"VLM Control policy step `{policy_step + 1}/{limit}` · simulator step "
                     f"`{current_step}` · confidence `{decision.confidence:.2f}` · "
                     f"`{elapsed:.2f}s`{load_note}."
@@ -385,6 +392,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                     *payload,
                     decision.raw,
                     policy_trace_markdown(memory, stop_reason),
+                    autonomy_message,
                 )
                 if stop_reason is not None:
                     return
@@ -513,6 +521,10 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                                     "Start VLM Control", variant="primary"
                                 )
                                 stop_autonomy_button = gr.Button("Stop")
+                            autonomy_status = gr.Markdown(
+                                "Ready to start an autonomous policy.",
+                                elem_classes="vlm-status",
+                            )
                             policy_trace = gr.Markdown(
                                 "### Autonomous Policy Trace\nNo autonomous run yet.",
                                 elem_classes="vlm-output",
@@ -619,7 +631,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             api_name="analyze_vlm",
             show_progress="hidden",
         )
-        autonomy_outputs = [*outputs, vlm_output, policy_trace]
+        autonomy_outputs = [*outputs, vlm_output, policy_trace, autonomy_status]
         start_autonomy.click(
             run_autonomy,
             [
@@ -634,13 +646,13 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             autonomy_outputs,
             api_name="run_autonomous_policy",
             show_progress="full",
-            show_progress_on=vlm_status,
+            show_progress_on=autonomy_status,
             concurrency_limit=1,
             concurrency_id="autonomous_policy",
         )
         stop_autonomy_button.click(
             stop_autonomy,
-            outputs=vlm_status,
+            outputs=autonomy_status,
             api_name="stop_autonomous_policy",
             queue=False,
             show_progress="hidden",
