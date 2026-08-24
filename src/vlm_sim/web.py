@@ -63,6 +63,9 @@ APP_CSS = """
 .state-card h3 { font-size: 14px !important; color: var(--cyan); margin: 4px 0 9px !important; }
 .nav-grid button { min-height: 42px; border-radius: 10px !important; font-weight: 650; }
 .nav-primary { border-color: #2e7f89 !important; }
+.manual-console { max-width: 560px; margin: 4px auto 0; }
+.manual-console button { min-height: 46px; }
+.key-hint { color: #91a0b8; text-align: center; font-size: 12px; margin: 8px 0 2px; }
 .vlm-output { min-height: 285px; padding: 12px; border-radius: 12px; background: #09111c; border: 1px solid #223149; }
 .vlm-status { color: var(--muted); min-height: 28px; }
 .oracle-note { color: #8fa0ba; font-size: 12px; }
@@ -76,6 +79,30 @@ SCENES = (
     + [f"FloorPlan{i}" for i in range(401, 431)]
 )
 HISTORY_HEADERS = ["Step", "Action", "Success", "ms", "x", "z", "yaw"]
+
+KEYBOARD_JS = """
+() => {
+  if (window.__vlmSimKeyboardInstalled) return;
+  window.__vlmSimKeyboardInstalled = true;
+  const keys = {
+    w: 'move-ahead', s: 'move-back', a: 'move-left', d: 'move-right',
+    q: 'rotate-left', e: 'rotate-right', r: 'look-up', f: 'look-down',
+    c: 'crouch', x: 'stand'
+  };
+  document.addEventListener('keydown', (event) => {
+    const target = event.target;
+    if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+    if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+    const id = keys[event.key.toLowerCase()];
+    if (!id) return;
+    const button = document.querySelector(`#${id} button, button#${id}`);
+    if (button && !button.disabled) {
+      event.preventDefault();
+      button.click();
+    }
+  });
+}
+"""
 
 
 class LazyBackend:
@@ -218,7 +245,7 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
         neutral_hue="slate",
         font=[gr.themes.GoogleFont("Inter"), "ui-sans-serif", "sans-serif"],
     )
-    with gr.Blocks(title="Embodied VLM Studio", css=APP_CSS, theme=theme) as app:
+    with gr.Blocks(title="Embodied VLM Studio", css=APP_CSS, theme=theme, js=KEYBOARD_JS) as app:
         gr.HTML(
             '<div class="app-shell"><div class="hero">'
             '<div class="eyebrow">AI2-THOR · Qwen3-VL · RTX 4090</div>'
@@ -237,6 +264,14 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                 observation = gr.Image(
                     label=None, type="pil", interactive=False, height=520, elem_id="observation-view"
                 )
+                with gr.Accordion("Action history and observation timeline", open=False):
+                    history = gr.Dataframe(
+                        headers=HISTORY_HEADERS,
+                        datatype=["number", "str", "bool", "number", "number", "number", "number"],
+                        interactive=False,
+                        wrap=True,
+                    )
+                    thumbnails = gr.Gallery(label="Observation Timeline", columns=5, height=190)
 
             with gr.Column(scale=6, elem_classes="panel"):
                 with gr.Tabs():
@@ -245,23 +280,26 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                             "Directly control the embodied agent. Navigation updates the observation "
                             "without automatically running the VLM."
                         )
-                        with gr.Column(elem_classes="nav-grid"):
+                        with gr.Column(elem_classes=["nav-grid", "manual-console"]):
                             with gr.Row():
-                                gr.HTML("")
-                                move_ahead = gr.Button("↑  Move Ahead", elem_classes="nav-primary")
-                                gr.HTML("")
+                                rotate_left = gr.Button("Q  ↶ Rotate", elem_id="rotate-left")
+                                move_ahead = gr.Button(
+                                    "W  ↑ Ahead", elem_classes="nav-primary", elem_id="move-ahead"
+                                )
+                                rotate_right = gr.Button("Rotate ↷  E", elem_id="rotate-right")
                             with gr.Row():
-                                move_left = gr.Button("←  Strafe Left")
-                                move_back = gr.Button("↓  Move Back")
-                                move_right = gr.Button("Strafe Right  →")
+                                move_left = gr.Button("A  ← Left", elem_id="move-left")
+                                move_back = gr.Button("S  ↓ Back", elem_id="move-back")
+                                move_right = gr.Button("Right →  D", elem_id="move-right")
                             with gr.Row():
-                                rotate_left = gr.Button("↶  Rotate Left")
-                                look_up = gr.Button("Look Up")
-                                look_down = gr.Button("Look Down")
-                                rotate_right = gr.Button("Rotate Right  ↷")
-                            with gr.Row():
-                                crouch = gr.Button("Crouch")
-                                stand = gr.Button("Stand")
+                                look_up = gr.Button("R  Look Up", elem_id="look-up")
+                                look_down = gr.Button("F  Look Down", elem_id="look-down")
+                                crouch = gr.Button("C  Crouch", elem_id="crouch")
+                                stand = gr.Button("X  Stand", elem_id="stand")
+                        gr.HTML(
+                            '<div class="key-hint">Keyboard: W/A/S/D move · Q/E rotate · '
+                            'R/F look · C/X posture</div>'
+                        )
                     with gr.Tab("VLM Copilot", id="vlm"):
                         gr.Markdown(
                             f"**Backend:** `{backend_name}`  ·  **Model:** `{backend.model}`\n\n"
@@ -282,6 +320,14 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
 
         with gr.Column(elem_classes="panel"):
             with gr.Tabs():
+                with gr.Tab("Spatial Map", id="map"):
+                    gr.Markdown(
+                        "Reachable positions, visible object centers, agent heading, and trajectory.",
+                        elem_classes="oracle-note",
+                    )
+                    top_down = gr.Image(
+                        label=None, type="pil", interactive=False, height=430, elem_id="map-view"
+                    )
                 with gr.Tab("Oracle Inspector", id="oracle"):
                     with gr.Row(equal_height=False):
                         with gr.Column(scale=2):
@@ -294,28 +340,12 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                             object_inspector = gr.Markdown(
                                 "### Object Inspector\nSelect a visible object after reset."
                             )
-                with gr.Tab("Spatial Map", id="map"):
-                    gr.Markdown(
-                        "Reachable positions, visible object centers, agent heading, and trajectory.",
-                        elem_classes="oracle-note",
-                    )
-                    top_down = gr.Image(
-                        label=None, type="pil", interactive=False, height=430, elem_id="map-view"
-                    )
-                with gr.Tab("Agent State / Last Transition", id="state"):
+                with gr.Tab("Current Stage", id="state"):
                     with gr.Row():
                         agent_state = gr.Markdown("### Agent State\n—", elem_classes="state-card")
                         action_state = gr.Markdown(
                             "### Last Transition\n—", elem_classes="state-card"
                         )
-                with gr.Tab("History / Timeline", id="history"):
-                    history = gr.Dataframe(
-                        headers=HISTORY_HEADERS,
-                        datatype=["number", "str", "bool", "number", "number", "number", "number"],
-                        interactive=False,
-                        wrap=True,
-                    )
-                    thumbnails = gr.Gallery(label="Observation Timeline", columns=7, height=190)
         gr.HTML('<div class="footer-note">VLM output is model-generated. Verify actions against simulator state.</div>')
 
         outputs = [
