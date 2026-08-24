@@ -418,7 +418,13 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             thumbnails,
             vlm_status,
         ]
-        reset.click(reset_scene, scene, outputs, api_name="reset_scene")
+        reset.click(
+            reset_scene,
+            scene,
+            outputs,
+            api_name="reset_scene",
+            show_progress="hidden",
+        )
         for button, action in (
             (move_ahead, "MoveAhead"),
             (move_back, "MoveBack"),
@@ -436,6 +442,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                 visible_objects,
                 outputs,
                 api_name=f"action_{action}",
+                show_progress="hidden",
             )
         visible_objects.change(
             lambda object_id: _object_markdown(debugger, object_id),
@@ -449,6 +456,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             [backend_selector, model_selector, prompt],
             [vlm_output, vlm_status],
             api_name="analyze_vlm",
+            show_progress="hidden",
         )
 
     return app
