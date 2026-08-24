@@ -1,0 +1,10 @@
+name: sim-vlm
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      # Install torch separately with scripts/create_env.sh so the CUDA wheel
+      # index is explicit and reproducible.
+      - -e .[local,dev]

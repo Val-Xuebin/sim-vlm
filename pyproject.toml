@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vlm-sim-demo"
+version = "0.1.0"
+description = "Minimal AI2-THOR to VLM scene-understanding demo"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+  "ai2thor==4.3.0",
+  "numpy>=1.26,<2.0",
+  "opencv-python==4.10.0.84",
+  "Pillow>=10.2",
+  "openai>=1.40",
+  "socksio>=1.0.0",
+  "gradio>=4.44,<6",
+]
+
+[project.optional-dependencies]
+local = [
+  "accelerate>=1.0",
+  "transformers>=4.57,<5",
+]
+dev = ["pytest>=8"]
+
+[project.scripts]
+vlm-sim = "vlm_sim.cli:main"
+vlm-sim-ui = "vlm_sim.web:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

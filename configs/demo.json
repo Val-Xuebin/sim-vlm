@@ -1,0 +1,8 @@
+{
+  "scene": "FloorPlan1",
+  "width": 640,
+  "height": 480,
+  "backend": "qwen",
+  "model": "Qwen/Qwen3-VL-2B-Instruct",
+  "prompt": "Describe the room, list important visible objects, identify possible hazards, and recommend one useful next robot action. Return concise JSON with keys summary, objects, hazards, next_action."
+}
