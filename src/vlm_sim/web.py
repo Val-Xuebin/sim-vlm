@@ -407,13 +407,15 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
         with gr.Row(elem_classes="panel"):
             scene = gr.Dropdown(SCENES, value="FloorPlan1", label="Scene", scale=5)
             reset = gr.Button("Reset Session", variant="primary", scale=1)
-        status = gr.Markdown("No active scene — reset a session to begin.", elem_id="status-line")
 
         with gr.Row(equal_height=False):
             with gr.Column(scale=8, elem_classes="panel"):
                 gr.Markdown("### Egocentric Observation", elem_classes="section-label")
                 observation = gr.Image(
                     label=None, type="pil", interactive=False, elem_id="observation-view"
+                )
+                status = gr.Markdown(
+                    "No active scene — reset a session to begin.", elem_id="status-line"
                 )
                 with gr.Accordion("Action history and observation timeline", open=False):
                     history = gr.Dataframe(
@@ -581,7 +583,8 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             scene,
             outputs,
             api_name="reset_scene",
-            show_progress="hidden",
+            show_progress="full",
+            show_progress_on=observation,
         )
         for button, action in (
             (move_ahead, "MoveAhead"),
@@ -630,7 +633,8 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             ],
             autonomy_outputs,
             api_name="run_autonomous_policy",
-            show_progress="hidden",
+            show_progress="full",
+            show_progress_on=vlm_status,
             concurrency_limit=1,
             concurrency_id="autonomous_policy",
         )
