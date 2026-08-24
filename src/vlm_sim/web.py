@@ -57,7 +57,8 @@ APP_CSS = """
   background: rgba(18,26,39,.88) !important; box-shadow: 0 14px 38px rgba(0,0,0,.18); }
 .section-label h3 { margin: 0 0 8px !important; font-size: 15px !important; color: #cbd7e8; }
 #observation-view { border-radius: 12px; overflow: hidden; }
-#observation-view .image-container { min-height: 500px; background: #05080d; }
+#observation-view .image-container { min-height: 0 !important; aspect-ratio: 4 / 3; background: #05080d; }
+#observation-view .image-container img { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 #status-line { min-height: 32px; border-left: 3px solid var(--cyan); padding: 6px 10px; color: var(--muted); }
 .state-card { min-height: 148px; padding: 8px 12px; border-radius: 12px; background: #0c1420; }
 .state-card h3 { font-size: 14px !important; color: var(--cyan); margin: 4px 0 9px !important; }
@@ -86,7 +87,7 @@ KEYBOARD_JS = """
   window.__vlmSimKeyboardInstalled = true;
   const keys = {
     w: 'move-ahead', s: 'move-back', a: 'move-left', d: 'move-right',
-    q: 'rotate-left', e: 'rotate-right', r: 'look-up', f: 'look-down',
+    q: 'rotate-left', e: 'rotate-right', arrowup: 'look-up', arrowdown: 'look-down',
     c: 'crouch', x: 'stand'
   };
   document.addEventListener('keydown', (event) => {
@@ -262,7 +263,7 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
             with gr.Column(scale=8, elem_classes="panel"):
                 gr.Markdown("### Egocentric Observation", elem_classes="section-label")
                 observation = gr.Image(
-                    label=None, type="pil", interactive=False, height=520, elem_id="observation-view"
+                    label=None, type="pil", interactive=False, elem_id="observation-view"
                 )
                 with gr.Accordion("Action history and observation timeline", open=False):
                     history = gr.Dataframe(
@@ -282,23 +283,26 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                         )
                         with gr.Column(elem_classes=["nav-grid", "manual-console"]):
                             with gr.Row():
-                                rotate_left = gr.Button("Q  ↶ Rotate", elem_id="rotate-left")
                                 move_ahead = gr.Button(
-                                    "W  ↑ Ahead", elem_classes="nav-primary", elem_id="move-ahead"
+                                    "[Move Ahead] (W)",
+                                    elem_classes="nav-primary",
+                                    elem_id="move-ahead",
                                 )
-                                rotate_right = gr.Button("Rotate ↷  E", elem_id="rotate-right")
+                                move_left = gr.Button("[Move Left] (A)", elem_id="move-left")
+                                move_back = gr.Button("[Move Back] (S)", elem_id="move-back")
+                                move_right = gr.Button("[Move Right] (D)", elem_id="move-right")
                             with gr.Row():
-                                move_left = gr.Button("A  ← Left", elem_id="move-left")
-                                move_back = gr.Button("S  ↓ Back", elem_id="move-back")
-                                move_right = gr.Button("Right →  D", elem_id="move-right")
+                                rotate_left = gr.Button("[Rotate Left] (Q)", elem_id="rotate-left")
+                                rotate_right = gr.Button("[Rotate Right] (E)", elem_id="rotate-right")
                             with gr.Row():
-                                look_up = gr.Button("R  Look Up", elem_id="look-up")
-                                look_down = gr.Button("F  Look Down", elem_id="look-down")
-                                crouch = gr.Button("C  Crouch", elem_id="crouch")
-                                stand = gr.Button("X  Stand", elem_id="stand")
+                                look_up = gr.Button("[Look Up] (↑)", elem_id="look-up")
+                                look_down = gr.Button("[Look Down] (↓)", elem_id="look-down")
+                            with gr.Row():
+                                crouch = gr.Button("[Crouch] (C)", elem_id="crouch")
+                                stand = gr.Button("[Stand] (X)", elem_id="stand")
                         gr.HTML(
                             '<div class="key-hint">Keyboard: W/A/S/D move · Q/E rotate · '
-                            'R/F look · C/X posture</div>'
+                            '↑/↓ look · C/X posture</div>'
                         )
                     with gr.Tab("VLM Copilot", id="vlm"):
                         gr.Markdown(
