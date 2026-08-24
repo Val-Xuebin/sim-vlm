@@ -5,27 +5,18 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .actions import POLICY_ACTIONS
 
-SUPPORTED_ACTIONS = (
-    "MoveAhead",
-    "MoveBack",
-    "MoveLeft",
-    "MoveRight",
-    "RotateLeft",
-    "RotateRight",
-    "LookUp",
-    "LookDown",
-    "Crouch",
-    "Stand",
-    "Stop",
-)
-ALLOWED_ACTIONS = set(SUPPORTED_ACTIONS)
+SUPPORTED_ACTIONS = POLICY_ACTIONS
+ALLOWED_ACTIONS = set(POLICY_ACTIONS)
 
 POLICY_OUTPUT_CONTRACT = f"""Return only one JSON object:
 {{
   "observation": "what is visually grounded in the current RGB frame",
   "new_information": "evidence not already present in policy memory",
   "action": "one exact action from the supported list",
+  "target": "visible object type for target actions, otherwise null",
+  "parameters": {{}},
   "confidence": 0.0,
   "task_status": "exploring | completed | blocked",
   "rationale": "brief reason for the action and confidence"
@@ -33,6 +24,10 @@ POLICY_OUTPUT_CONTRACT = f"""Return only one JSON object:
 
 Supported AI2-THOR actions in this control loop:
 {", ".join(SUPPORTED_ACTIONS)}
+
+Use parameters only for openness (0..1), moveMagnitude (0.05..2.0), or fillLiquid
+(water, coffee, wine). Never invent an objectId; the controller resolves target object types to
+visible simulator objects.
 
 confidence is a number from 0 to 1 measuring whether accumulated visual evidence is sufficient
 to complete the task. Do not include Markdown fences or text outside the JSON object."""
@@ -48,6 +43,8 @@ class PolicyDecision:
     rationale: str
     raw: str
     action_result: str = "not executed"
+    target: str | None = None
+    parameters: dict[str, Any] | None = None
 
 
 def build_policy_prompt(task: str, memory: list[PolicyDecision], threshold: float) -> str:
@@ -58,6 +55,8 @@ def build_policy_prompt(task: str, memory: list[PolicyDecision], threshold: floa
             "observation": item.observation,
             "new_information": item.new_information,
             "action": item.action,
+            "target": item.target,
+            "parameters": item.parameters or {},
             "confidence": item.confidence,
             "task_status": item.task_status,
             "action_result": item.action_result,
@@ -72,7 +71,11 @@ def build_policy_prompt(task: str, memory: list[PolicyDecision], threshold: floa
         f"{json.dumps(history, ensure_ascii=False)}\n\n"
         "Seek a new viewpoint when important task evidence is unseen or uncertain. Do not claim "
         "hidden information. Use Stop when the task is completed with sufficient confidence or "
-        "no safe useful action remains.\n\n"
+        "no safe useful action remains. Treat an executed or rejected action result in memory as "
+        "new evidence; do not repeat a state-changing action that already succeeded. Match camera "
+        "motion to the missing region: LookUp reveals areas above, LookDown reveals areas below, "
+        "and rotation reveals unseen sides. Do not repeat a view action if it produced no useful "
+        "new information.\n\n"
         f"{POLICY_OUTPUT_CONTRACT}"
     )
 
@@ -108,6 +111,8 @@ def parse_policy_decision(raw: str) -> PolicyDecision:
         task_status=status,
         rationale=str(payload.get("rationale", "")),
         raw=raw,
+        target=str(payload["target"]) if payload.get("target") is not None else None,
+        parameters=payload.get("parameters") if isinstance(payload.get("parameters"), dict) else {},
     )
 
 
@@ -118,6 +123,8 @@ def should_stop(decision: PolicyDecision, threshold: float) -> str | None:
         return "policy reported that the task is blocked"
     if decision.action == "Stop":
         return "policy selected Stop"
+    if decision.action == "Done":
+        return "policy selected AI2-THOR Done"
     return None
 
 

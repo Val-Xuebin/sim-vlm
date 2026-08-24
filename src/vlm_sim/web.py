@@ -16,7 +16,7 @@ os.environ.setdefault("HF_HOME", str(PROJECT_HF_HOME))
 if (PROJECT_HF_HOME / "hub" / "models--Qwen--Qwen3-VL-2B-Instruct").is_dir():
     os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
-from .backends import VLMBackend, make_backend
+from .actions import action_available, action_kwargs
 from .autonomy import (
     POLICY_OUTPUT_CONTRACT,
     PolicyDecision,
@@ -25,8 +25,8 @@ from .autonomy import (
     policy_trace_markdown,
     should_stop,
 )
+from .backends import VLMBackend, make_backend
 from .debugger import SimulatorDebugger
-
 
 DEFAULT_MODEL = "Qwen/Qwen3-VL-2B-Instruct"
 DEFAULT_MODEL_OPTIONS = {
@@ -122,13 +122,17 @@ KEYBOARD_JS = """
   const keys = {
     w: 'move-ahead', s: 'move-back', a: 'move-left', d: 'move-right',
     q: 'rotate-left', e: 'rotate-right', arrowup: 'look-up', arrowdown: 'look-down',
-    c: 'crouch', x: 'stand'
+    c: 'crouch', x: 'stand', enter: 'done', p: 'pickup', 'shift+p': 'put', g: 'drop', t: 'throw',
+    j: 'push', 'shift+j': 'pull', o: 'open', 'shift+o': 'close', y: 'toggle-on',
+    'shift+y': 'toggle-off', b: 'break', k: 'slice', i: 'cook', u: 'use-up',
+    n: 'dirty', 'shift+n': 'clean', l: 'fill', 'shift+l': 'empty'
   };
   document.addEventListener('keydown', (event) => {
     const target = event.target;
     if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
     if (event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
-    const id = keys[event.key.toLowerCase()];
+    const chord = `${event.shiftKey ? 'shift+' : ''}${event.key.toLowerCase()}`;
+    const id = keys[chord];
     if (!id) return;
     const button = document.querySelector(`#${id} button, button#${id}`);
     if (button && !button.disabled) {
@@ -221,7 +225,11 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
     autonomy_stop = threading.Event()
     autonomy_running = threading.Event()
 
-    def session_payload(selected_object: str | None = None, elapsed_ms: float = 0.0):
+    def session_payload(
+        selected_object: str | None = None,
+        selected_manual_target: str | None = None,
+        elapsed_ms: float = 0.0,
+    ):
         if debugger.observation is None:
             raise gr.Error("Reset a scene first.")
         metadata = debugger.observation.metadata
@@ -229,6 +237,12 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
         object_ids = [str(obj.get("objectId")) for obj in visible]
         if selected_object not in object_ids:
             selected_object = object_ids[0] if object_ids else None
+        if selected_manual_target not in object_ids:
+            selected_manual_target = object_ids[0] if object_ids else None
+        all_objects = metadata.get("objects", [])
+        manual_object = next(
+            (obj for obj in visible if obj.get("objectId") == selected_manual_target), None
+        )
         step = max(0, len(debugger.history) - 1)
         status = (
             f"**Live session** · step `{step}` · `{metadata.get('sceneName', 'unknown')}` · "
@@ -246,6 +260,11 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             debugger.history_rows(),
             debugger.history_gallery(),
             f"Observation changed to step `{step}` — run VLM analysis when ready.",
+            gr.Dropdown(choices=object_ids, value=selected_manual_target),
+            *[
+                gr.Button(interactive=action_available(action, manual_object, all_objects))
+                for action in interaction_buttons
+            ],
         )
 
     def reset_scene(scene: str):
@@ -255,14 +274,41 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
         debugger.reset(scene)
         return session_payload(elapsed_ms=(time.perf_counter() - started) * 1000)
 
-    def take_action(action: str, selected_object: str | None):
+    def take_action(
+        action: str,
+        selected_object: str | None,
+        selected_manual_target: str | None,
+        parameters: dict[str, Any] | None = None,
+    ):
         if autonomy_running.is_set():
             raise gr.Error("Stop VLM Control before using Manual Policy.")
         if debugger.simulator is None:
             raise gr.Error("Reset a scene before taking an action.")
         started = time.perf_counter()
-        debugger.step(action)
-        return session_payload(selected_object, (time.perf_counter() - started) * 1000)
+        objects = debugger.observation.metadata.get("objects", []) if debugger.observation else []
+        try:
+            kwargs = action_kwargs(action, selected_manual_target, parameters, objects)
+        except ValueError as exc:
+            raise gr.Error(str(exc)) from exc
+        debugger.step(action, **kwargs)
+        return session_payload(
+            selected_object,
+            selected_manual_target,
+            (time.perf_counter() - started) * 1000,
+        )
+
+    def manual_capabilities(selected_manual_target: str | None):
+        if debugger.observation is None:
+            return [gr.Button(interactive=False) for _ in interaction_buttons]
+        objects = debugger.observation.metadata.get("objects", [])
+        target = next(
+            (obj for obj in debugger.visible_objects() if obj.get("objectId") == selected_manual_target),
+            None,
+        )
+        return [
+            gr.Button(interactive=action_available(action, target, objects))
+            for action in interaction_buttons
+        ]
 
     def analyze(selected_backend: str, selected_model: str, prompt: str):
         if not prompt.strip():
@@ -369,20 +415,27 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                 stop_reason = should_stop(decision, threshold)
                 if autonomy_stop.is_set():
                     stop_reason = "stopped by user"
-                elif stop_reason is None and policy_step + 1 >= limit:
-                    stop_reason = f"maximum policy steps reached ({limit})"
 
                 if stop_reason is None:
-                    action_observation = debugger.step(decision.action)
-                    action_success = bool(
-                        action_observation.metadata.get("lastActionSuccess", False)
-                    )
-                    action_error = action_observation.metadata.get("errorMessage") or ""
-                    decision.action_result = (
-                        "executed successfully"
-                        if action_success
-                        else f"failed: {action_error or 'unknown simulator error'}"
-                    )
+                    try:
+                        objects = debugger.observation.metadata.get("objects", [])
+                        kwargs = action_kwargs(
+                            decision.action, decision.target, decision.parameters, objects
+                        )
+                        action_observation = debugger.step(decision.action, **kwargs)
+                        action_success = bool(
+                            action_observation.metadata.get("lastActionSuccess", False)
+                        )
+                        action_error = action_observation.metadata.get("errorMessage") or ""
+                        decision.action_result = (
+                            "executed successfully"
+                            if action_success
+                            else f"failed: {action_error or 'unknown simulator error'}"
+                        )
+                    except (TypeError, ValueError) as exc:
+                        decision.action_result = f"rejected: {exc}"
+                if stop_reason is None and policy_step + 1 >= limit:
+                    stop_reason = f"maximum policy steps reached ({limit})"
                 payload = list(session_payload(selected_object))
                 current_step = max(0, len(debugger.history) - 1)
                 load_note = " · model loaded" if loaded_now else ""
@@ -444,6 +497,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             "Directly control the embodied agent. Navigation updates the observation "
                             "without automatically running the VLM."
                         )
+                        gr.Markdown("#### Navigation & Posture")
                         with gr.Column(elem_classes=["nav-grid", "manual-console"]):
                             with gr.Row():
                                 move_ahead = gr.Button(
@@ -463,10 +517,42 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                             with gr.Row():
                                 crouch = gr.Button("↧ Crouch (C)", elem_id="crouch")
                                 stand = gr.Button("↥ Stand (X)", elem_id="stand")
+                                done = gr.Button("✓ Done (Enter)", elem_id="done")
                         gr.HTML(
                             '<div class="key-hint">Keyboard: W/A/S/D move · Q/E rotate · '
                             '↑/↓ look · C/X posture</div>'
                         )
+                        manual_target = gr.Dropdown(
+                            [],
+                            label="Interaction target",
+                            info="Buttons enable only when the selected visible object supports the action.",
+                        )
+                        with gr.Accordion("Inventory", open=True):
+                            with gr.Row():
+                                pickup = gr.Button("⤒ Pickup (P)", interactive=False, elem_id="pickup")
+                                put = gr.Button("⌄ Put (Shift+P)", interactive=False, elem_id="put")
+                                drop = gr.Button("✋ Drop (G)", interactive=False, elem_id="drop")
+                                throw = gr.Button("➤ Throw (T)", interactive=False, elem_id="throw")
+                        with gr.Accordion("Object Movement", open=False):
+                            with gr.Row():
+                                push = gr.Button("→ Push (J)", interactive=False, elem_id="push")
+                                pull = gr.Button("← Pull (Shift+J)", interactive=False, elem_id="pull")
+                        with gr.Accordion("Object State", open=False):
+                            with gr.Row():
+                                open_object = gr.Button("Open (O)", interactive=False, elem_id="open")
+                                close_object = gr.Button("Close (Shift+O)", interactive=False, elem_id="close")
+                                toggle_on = gr.Button("Toggle On (Y)", interactive=False, elem_id="toggle-on")
+                                toggle_off = gr.Button("Toggle Off (Shift+Y)", interactive=False, elem_id="toggle-off")
+                            with gr.Row():
+                                break_object = gr.Button("Break (B)", interactive=False, elem_id="break")
+                                slice_object = gr.Button("Slice (K)", interactive=False, elem_id="slice")
+                                cook_object = gr.Button("Cook (I)", interactive=False, elem_id="cook")
+                                use_up = gr.Button("Use Up (U)", interactive=False, elem_id="use-up")
+                            with gr.Row():
+                                dirty_object = gr.Button("Dirty (N)", interactive=False, elem_id="dirty")
+                                clean_object = gr.Button("Clean (Shift+N)", interactive=False, elem_id="clean")
+                                fill_object = gr.Button("Fill Water (L)", interactive=False, elem_id="fill")
+                                empty_object = gr.Button("Empty (Shift+L)", interactive=False, elem_id="empty")
                     with gr.Tab("VLM Copilot", id="vlm"):
                         with gr.Row():
                             backend_selector = gr.Dropdown(
@@ -582,6 +668,26 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                         )
         gr.HTML('<div class="footer-note">VLM output is model-generated. Verify actions against simulator state.</div>')
 
+        interaction_buttons = {
+            "PickupObject": pickup,
+            "PutObject": put,
+            "DropHandObject": drop,
+            "ThrowObject": throw,
+            "PushObject": push,
+            "PullObject": pull,
+            "OpenObject": open_object,
+            "CloseObject": close_object,
+            "ToggleObjectOn": toggle_on,
+            "ToggleObjectOff": toggle_off,
+            "BreakObject": break_object,
+            "SliceObject": slice_object,
+            "CookObject": cook_object,
+            "UseUpObject": use_up,
+            "DirtyObject": dirty_object,
+            "CleanObject": clean_object,
+            "FillObjectWithLiquid": fill_object,
+            "EmptyLiquidFromObject": empty_object,
+        }
         outputs = [
             observation,
             status,
@@ -593,6 +699,8 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             history,
             thumbnails,
             vlm_status,
+            manual_target,
+            *interaction_buttons.values(),
         ]
         reset.click(
             reset_scene,
@@ -613,14 +721,30 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
             (look_down, "LookDown"),
             (crouch, "Crouch"),
             (stand, "Stand"),
+            (done, "Done"),
         ):
             button.click(
-                lambda selected, a=action: take_action(a, selected),
-                visible_objects,
+                lambda selected, target, a=action: take_action(a, selected, target),
+                [visible_objects, manual_target],
                 outputs,
                 api_name=f"action_{action}",
                 show_progress="hidden",
             )
+        for action, button in interaction_buttons.items():
+            button.click(
+                lambda selected, target, a=action: take_action(a, selected, target),
+                [visible_objects, manual_target],
+                outputs,
+                api_name=f"action_{action}",
+                show_progress="hidden",
+            )
+        manual_target.change(
+            manual_capabilities,
+            manual_target,
+            list(interaction_buttons.values()),
+            api_name="manual_capabilities",
+            show_progress="hidden",
+        )
         visible_objects.change(
             lambda object_id: _object_markdown(debugger, object_id),
             visible_objects,

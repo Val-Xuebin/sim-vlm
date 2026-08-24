@@ -57,7 +57,11 @@ At each policy step the VLM receives:
 
 The VLM returns a strict JSON decision. The simulator executes its action and supplies the new observation on the next step. The run stops when the confidence threshold is reached, the model selects `Stop`, reports `blocked`, reaches the maximum step count, or the user clicks **Stop**. The final RGB observation, raw VLM output, and complete policy trace remain visible.
 
-The collapsible **VLM Output Contract** shows the exact JSON schema and every action currently executable by the loop: `MoveAhead`, `MoveBack`, `MoveLeft`, `MoveRight`, `RotateLeft`, `RotateRight`, `LookUp`, `LookDown`, `Crouch`, `Stand`, and `Stop`. The same contract is injected into every policy prompt and enforced by the parser. AI2-THOR interaction actions requiring arguments such as `objectId` are not yet exposed by this controller.
+The collapsible **VLM Output Contract** shows the exact JSON schema and all 29 task-level simulator actions currently exposed. It covers navigation/posture, inventory (`PickupObject`, `PutObject`, `DropHandObject`, `ThrowObject`), object movement (`PushObject`, `PullObject`), object state changes, `Done`, and the policy-only `Stop` sentinel.
+
+For target actions the VLM outputs a visual object type such as `Mug`, never an opaque `objectId`. The controller grounds that type to the nearest compatible visible simulator object, checks its metadata capability and current state, sanitizes parameters, and only then executes the action. Supported parameters are `openness`, `moveMagnitude`, and `fillLiquid`. Invalid or hallucinated targets stop the policy safely.
+
+Manual Policy uses the same capability checks. Select a visible interaction target; only valid buttons become active. Buttons are grouped into Navigation & Posture, Inventory, Object Movement, and Object State, with keyboard shortcuts shown on each button. Administrative actions, teleportation, metadata queries, and low-level physics controls are intentionally excluded from VLM task control because they bypass embodied perception or alter simulator administration rather than perform an embodied task.
 
 Manual actions and scene reset are rejected while VLM Control is active. Keep a finite maximum step count: model actions and confidence are not guaranteed to be correct.
 

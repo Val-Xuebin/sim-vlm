@@ -58,3 +58,12 @@
 - Stop conditions: configured confidence threshold, `Stop`, `blocked`, user cancellation, policy error, or a hard maximum of 50 steps. Scene reset and manual actions are rejected while the loop is active.
 - Metadata end-to-end API validation reset `FloorPlan1`, returned final observation and trace, and stopped safely on its non-policy response.
 - Qwen3-VL-2B end-to-end API validation task: `Determine whether a refrigerator is visible.`, threshold `0.75`, maximum `2` steps. First inference including model load took 14.28 seconds; output reported the refrigerator visible, confidence `0.95`, status `completed`, action `Stop`, and the loop stopped at the threshold without moving.
+
+## 2026-08-25 task-level interaction actions
+
+- Tagged stable pre-change commit as `pre-interaction-actions-20260825`.
+- Expanded the shared Manual/VLM action catalog to 29 simulator actions plus policy `Stop`. Target actions resolve a VLM-provided visual object type or Manual object ID against visible metadata, then enforce object capability, state, held-object preconditions, and bounded parameters.
+- Manual controls are grouped by action class and dynamically enabled for the selected target. Keyboard shortcuts use unmodified and Shift-modified keys and remain disabled while typing into form controls.
+- Linux64 + Xvfb API validation on `FloorPlan1`: selected a visible Cabinet, executed `OpenObject` successfully in 378.1 ms, then `CloseObject` successfully in 371.7 ms. The temporary validation server was stopped afterward.
+- Qwen grounding trial requested `Open a visible cabinet and confirm that it is open.` In the first run, Qwen emitted `OpenObject`, visual target `cabinet`, and `openness=0.5`; grounding resolved the real Cabinet ID and AI2-THOR executed it successfully. A repeated Open was rejected because metadata already reported the cabinet open, demonstrating state gating.
+- A second stochastic trial did not complete the task: Qwen selected `LookDown` three times and hit the camera-horizon limit. The controller bounded the run at three steps and recorded the final simulator failure. The policy prompt now explicitly maps missing upper/lower/side regions to camera motions and discourages repeated view actions without new evidence; model planning is still not guaranteed.

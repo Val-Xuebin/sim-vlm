@@ -1,17 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 import os
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
 
-from .simulator import Observation, ThorSimulator
-from .simulator import compact_metadata
+from .simulator import Observation, ThorSimulator, compact_metadata
 
 
 @dataclass
@@ -55,12 +54,14 @@ class SimulatorDebugger:
             self._append_history("Reset", 0.0)
             return self.observation
 
-    def step(self, action: str) -> Observation:
+    def step(self, action: str, **kwargs: Any) -> Observation:
         with self._lock:
             if self.simulator is None:
                 raise RuntimeError("Reset a scene before taking an action.")
             started = time.perf_counter()
-            self.observation = self.simulator.step(action, raise_on_failure=False)
+            self.observation = self.simulator.step(
+                action, raise_on_failure=False, **kwargs
+            )
             elapsed_ms = (time.perf_counter() - started) * 1000
             position = self.observation.metadata.get("agent", {}).get("position", {}).copy()
             self.trajectory.append(position)

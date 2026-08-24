@@ -44,3 +44,10 @@ def test_confidence_threshold_stops_even_before_stop_action():
         '{"action":"RotateLeft","confidence":0.9,"task_status":"exploring"}'
     )
     assert should_stop(decision, 0.85) == "requested confidence threshold reached"
+
+
+def test_native_done_stops_policy():
+    decision = parse_policy_decision(
+        '{"action":"Done","confidence":0.4,"task_status":"exploring"}'
+    )
+    assert should_stop(decision, 0.85) == "policy selected AI2-THOR Done"
