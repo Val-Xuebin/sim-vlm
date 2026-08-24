@@ -289,7 +289,7 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
     with gr.Blocks(title="Embodied VLM Studio", css=APP_CSS, theme=theme, js=KEYBOARD_JS) as app:
         gr.HTML(
             '<div class="app-shell"><div class="hero">'
-            '<div class="eyebrow">AI2-THOR · Qwen3-VL · RTX 4090</div>'
+            '<div class="eyebrow">AI2-THOR · VLM · RTX 4090</div>'
             '<h1>Embodied VLM Studio</h1>'
             '<p>Drive the simulator, inspect oracle state, and ask a vision-language model '
             'to reason over the current egocentric observation.</p></div></div>'
@@ -324,22 +324,22 @@ def build_app(backend_name: str = "transformers", model: str | None = None):
                         with gr.Column(elem_classes=["nav-grid", "manual-console"]):
                             with gr.Row():
                                 move_ahead = gr.Button(
-                                    "[Move Ahead] (W)",
+                                    "↑ Move Ahead (W)",
                                     elem_classes="nav-primary",
                                     elem_id="move-ahead",
                                 )
-                                move_left = gr.Button("[Move Left] (A)", elem_id="move-left")
-                                move_back = gr.Button("[Move Back] (S)", elem_id="move-back")
-                                move_right = gr.Button("[Move Right] (D)", elem_id="move-right")
+                                move_left = gr.Button("← Move Left (A)", elem_id="move-left")
+                                move_back = gr.Button("↓ Move Back (S)", elem_id="move-back")
+                                move_right = gr.Button("Move Right → (D)", elem_id="move-right")
                             with gr.Row():
-                                rotate_left = gr.Button("[Rotate Left] (Q)", elem_id="rotate-left")
-                                rotate_right = gr.Button("[Rotate Right] (E)", elem_id="rotate-right")
+                                rotate_left = gr.Button("↶ Rotate Left (Q)", elem_id="rotate-left")
+                                rotate_right = gr.Button("Rotate Right ↷ (E)", elem_id="rotate-right")
                             with gr.Row():
-                                look_up = gr.Button("[Look Up] (↑)", elem_id="look-up")
-                                look_down = gr.Button("[Look Down] (↓)", elem_id="look-down")
+                                look_up = gr.Button("△ Look Up (↑)", elem_id="look-up")
+                                look_down = gr.Button("▽ Look Down (↓)", elem_id="look-down")
                             with gr.Row():
-                                crouch = gr.Button("[Crouch] (C)", elem_id="crouch")
-                                stand = gr.Button("[Stand] (X)", elem_id="stand")
+                                crouch = gr.Button("↧ Crouch (C)", elem_id="crouch")
+                                stand = gr.Button("↥ Stand (X)", elem_id="stand")
                         gr.HTML(
                             '<div class="key-hint">Keyboard: W/A/S/D move · Q/E rotate · '
                             '↑/↓ look · C/X posture</div>'
