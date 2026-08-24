@@ -237,30 +237,31 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                 observation = gr.Image(
                     label=None, type="pil", interactive=False, height=520, elem_id="observation-view"
                 )
-                with gr.Row():
-                    agent_state = gr.Markdown("### Agent State\n—", elem_classes="state-card")
-                    action_state = gr.Markdown("### Last Transition\n—", elem_classes="state-card")
-                gr.Markdown("### Manual Policy", elem_classes="section-label")
-                with gr.Column(elem_classes="nav-grid"):
-                    with gr.Row():
-                        gr.HTML("")
-                        move_ahead = gr.Button("↑  Move Ahead", elem_classes="nav-primary")
-                        gr.HTML("")
-                    with gr.Row():
-                        move_left = gr.Button("←  Strafe Left")
-                        move_back = gr.Button("↓  Move Back")
-                        move_right = gr.Button("Strafe Right  →")
-                    with gr.Row():
-                        rotate_left = gr.Button("↶  Rotate Left")
-                        look_up = gr.Button("Look Up")
-                        look_down = gr.Button("Look Down")
-                        rotate_right = gr.Button("Rotate Right  ↷")
-                    with gr.Row():
-                        crouch = gr.Button("Crouch")
-                        stand = gr.Button("Stand")
 
             with gr.Column(scale=6, elem_classes="panel"):
                 with gr.Tabs():
+                    with gr.Tab("Manual Policy", id="manual"):
+                        gr.Markdown(
+                            "Directly control the embodied agent. Navigation updates the observation "
+                            "without automatically running the VLM."
+                        )
+                        with gr.Column(elem_classes="nav-grid"):
+                            with gr.Row():
+                                gr.HTML("")
+                                move_ahead = gr.Button("↑  Move Ahead", elem_classes="nav-primary")
+                                gr.HTML("")
+                            with gr.Row():
+                                move_left = gr.Button("←  Strafe Left")
+                                move_back = gr.Button("↓  Move Back")
+                                move_right = gr.Button("Strafe Right  →")
+                            with gr.Row():
+                                rotate_left = gr.Button("↶  Rotate Left")
+                                look_up = gr.Button("Look Up")
+                                look_down = gr.Button("Look Down")
+                                rotate_right = gr.Button("Rotate Right  ↷")
+                            with gr.Row():
+                                crouch = gr.Button("Crouch")
+                                stand = gr.Button("Stand")
                     with gr.Tab("VLM Copilot", id="vlm"):
                         gr.Markdown(
                             f"**Backend:** `{backend_name}`  ·  **Model:** `{backend.model}`\n\n"
@@ -278,32 +279,43 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                             "### Awaiting analysis\nThe result will appear here without blocking navigation history.",
                             elem_classes="vlm-output",
                         )
-                    with gr.Tab("Oracle Inspector", id="oracle"):
-                        gr.Markdown(
-                            "Simulator ground truth for debugging—never passed to the visual model.",
-                            elem_classes="oracle-note",
-                        )
-                        visible_objects = gr.Dropdown([], label="Visible object")
-                        object_inspector = gr.Markdown(
-                            "### Object Inspector\nSelect a visible object after reset."
-                        )
-                    with gr.Tab("Spatial Map", id="map"):
-                        gr.Markdown(
-                            "Reachable positions, visible object centers, agent heading, and trajectory.",
-                            elem_classes="oracle-note",
-                        )
-                        top_down = gr.Image(
-                            label=None, type="pil", interactive=False, height=430, elem_id="map-view"
-                        )
 
-        with gr.Accordion("Action history and observation timeline", open=False):
-            history = gr.Dataframe(
-                headers=HISTORY_HEADERS,
-                datatype=["number", "str", "bool", "number", "number", "number", "number"],
-                interactive=False,
-                wrap=True,
-            )
-            thumbnails = gr.Gallery(label="Observation Timeline", columns=7, height=190)
+        with gr.Column(elem_classes="panel"):
+            with gr.Tabs():
+                with gr.Tab("Oracle Inspector", id="oracle"):
+                    with gr.Row(equal_height=False):
+                        with gr.Column(scale=2):
+                            gr.Markdown(
+                                "Simulator ground truth for debugging—never passed to the visual model.",
+                                elem_classes="oracle-note",
+                            )
+                            visible_objects = gr.Dropdown([], label="Visible object")
+                        with gr.Column(scale=3):
+                            object_inspector = gr.Markdown(
+                                "### Object Inspector\nSelect a visible object after reset."
+                            )
+                with gr.Tab("Spatial Map", id="map"):
+                    gr.Markdown(
+                        "Reachable positions, visible object centers, agent heading, and trajectory.",
+                        elem_classes="oracle-note",
+                    )
+                    top_down = gr.Image(
+                        label=None, type="pil", interactive=False, height=430, elem_id="map-view"
+                    )
+                with gr.Tab("Agent State / Last Transition", id="state"):
+                    with gr.Row():
+                        agent_state = gr.Markdown("### Agent State\n—", elem_classes="state-card")
+                        action_state = gr.Markdown(
+                            "### Last Transition\n—", elem_classes="state-card"
+                        )
+                with gr.Tab("History / Timeline", id="history"):
+                    history = gr.Dataframe(
+                        headers=HISTORY_HEADERS,
+                        datatype=["number", "str", "bool", "number", "number", "number", "number"],
+                        interactive=False,
+                        wrap=True,
+                    )
+                    thumbnails = gr.Gallery(label="Observation Timeline", columns=7, height=190)
         gr.HTML('<div class="footer-note">VLM output is model-generated. Verify actions against simulator state.</div>')
 
         outputs = [
