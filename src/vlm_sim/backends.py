@@ -37,13 +37,18 @@ class MetadataBackend(VLMBackend):
         )
 
 
-class QwenBackend(VLMBackend):
+class TransformersBackend(VLMBackend):
+    """Local Hugging Face image-text model loaded through Transformers auto classes."""
+
     def __init__(self, model: str, max_new_tokens: int = 256):
         import torch
         from transformers import AutoModelForImageTextToText, AutoProcessor
 
         if not torch.cuda.is_available():
-            raise RuntimeError("Qwen backend requires CUDA, but torch.cuda.is_available() is false")
+            raise RuntimeError(
+                "The local Transformers backend requires CUDA, but "
+                "torch.cuda.is_available() is false"
+            )
         self.torch = torch
         self.processor = AutoProcessor.from_pretrained(model)
         self.model = AutoModelForImageTextToText.from_pretrained(
@@ -105,8 +110,8 @@ class OpenAICompatibleBackend(VLMBackend):
 
 
 def make_backend(name: str, model: str, metadata: dict[str, Any] | None = None) -> VLMBackend:
-    if name == "qwen":
-        return QwenBackend(model)
+    if name in {"qwen", "transformers"}:
+        return TransformersBackend(model)
     if name == "openai":
         return OpenAICompatibleBackend(model)
     if name == "metadata":

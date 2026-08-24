@@ -1,6 +1,6 @@
-# AI2-THOR + Qwen3-VL Demo
+# AI2-THOR + VLM Demo
 
-A compact simulator debugger for AI2-THOR with local Qwen3-VL scene analysis. The UI provides live navigation, RGB observations, simulator metadata, a spatial map, and on-demand VLM analysis.
+A compact AI2-THOR debugger with selectable local and remote vision-language models. The UI provides live navigation, RGB observations, simulator metadata, a spatial map, and on-demand VLM analysis.
 
 ## Requirements
 
@@ -34,7 +34,7 @@ Run artifacts are written to `outputs/<run-id>/`.
 ## Start the UI
 
 ```bash
-.venv/bin/vlm-sim-ui --backend qwen --host 127.0.0.1 --port 7860
+.venv/bin/vlm-sim-ui --backend transformers --host 127.0.0.1 --port 7860
 ```
 
 From your Mac, forward the server port:
@@ -43,13 +43,45 @@ From your Mac, forward the server port:
 ssh -L 7860:localhost:7860 <user>@<server>
 ```
 
-Open `http://localhost:7860`. The model loads on the first **Analyze Current Observation** request and is reused afterward.
+Open `http://localhost:7860`. Select **Backend** and **Model** in VLM Copilot. Models load only when **Analyze Current Observation** is clicked and are reused by backend/model pair.
+
+## Model backends
+
+- `metadata`: simulator-only smoke test; no pixel inference or GPU required.
+- `transformers`: local Hugging Face VLM using `AutoProcessor` and `AutoModelForImageTextToText`; CUDA is required.
+- `openai`: any vision model exposed through an OpenAI-compatible API; no local GPU required.
+
+The Model dropdown accepts custom IDs. Persistent presets live in [`configs/models.json`](configs/models.json):
+
+```json
+{
+  "metadata": ["simulator-metadata"],
+  "transformers": ["Qwen/Qwen3-VL-2B-Instruct", "organization/model-id"],
+  "openai": ["gpt-4.1-mini", "provider/model-name"]
+}
+```
+
+Use another configuration file with:
+
+```bash
+VLM_SIM_MODEL_CONFIG=/path/to/models.json .venv/bin/vlm-sim-ui
+```
+
+For an OpenAI-compatible endpoint:
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_BASE_URL=https://your-endpoint/v1
+.venv/bin/vlm-sim-ui --backend openai
+```
+
+Local models must support the Transformers image-text auto classes and chat template. Models requiring custom preprocessing should be added as a new `VLMBackend` adapter in `src/vlm_sim/backends.py`.
 
 ## CLI
 
 ```bash
-bash scripts/run_demo.sh --backend qwen \
+bash scripts/run_demo.sh --backend transformers \
   --action RotateRight --action MoveAhead --run-id moved-view
 ```
 
-The `metadata` backend is only a pipeline smoke test and does not inspect pixels. Use `qwen` for real visual inference.
+`qwen` remains a CLI alias for `transformers` for backward compatibility.

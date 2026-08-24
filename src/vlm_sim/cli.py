@@ -79,7 +79,11 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--width", type=int, default=640)
     demo.add_argument("--height", type=int, default=480)
     demo.add_argument("--action", action="append", help="AI2-THOR action; repeatable")
-    demo.add_argument("--backend", choices=["qwen", "openai", "metadata"], default="qwen")
+    demo.add_argument(
+        "--backend",
+        choices=["transformers", "qwen", "openai", "metadata"],
+        default="transformers",
+    )
     demo.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
     demo.add_argument("--prompt", default=DEFAULT_PROMPT)
     demo.add_argument("--output-dir", default="outputs")
@@ -88,7 +92,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ask = sub.add_parser("ask", help="ask a VLM about an existing image")
     ask.add_argument("image")
-    ask.add_argument("--backend", choices=["qwen", "openai"], default="qwen")
+    ask.add_argument(
+        "--backend", choices=["transformers", "qwen", "openai"], default="transformers"
+    )
     ask.add_argument("--model", default="Qwen/Qwen3-VL-2B-Instruct")
     ask.add_argument("--prompt", default=DEFAULT_PROMPT)
     ask.set_defaults(func=ask_image)

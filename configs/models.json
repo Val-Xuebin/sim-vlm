@@ -1,0 +1,12 @@
+{
+  "metadata": [
+    "simulator-metadata"
+  ],
+  "transformers": [
+    "Qwen/Qwen3-VL-2B-Instruct",
+    "Qwen/Qwen3-VL-4B-Instruct"
+  ],
+  "openai": [
+    "gpt-4.1-mini"
+  ]
+}

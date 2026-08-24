@@ -42,3 +42,11 @@
 - Metadata-backend regression: `/reset_scene` returned all 10 debugger outputs and `/analyze_vlm` returned a step-linked response.
 - Qwen-backend regression on `FloorPlan1`: reset took 8.27 seconds; first VLM analysis including model load took 15.00 seconds. Qwen correctly described the refrigerator, cabinets, countertop, appliance, and tiled backsplash.
 - UI HTTP and Gradio API tests used temporary localhost ports and the servers were stopped after validation.
+
+## 2026-08-25 configurable VLM backends
+
+- Added runtime Backend and Model selectors. Model presets are read from `configs/models.json`; custom model IDs remain accepted directly in the UI.
+- Backend instances are lazy-loaded and cached by `(backend, model)`. Switching models does not restart the simulator, and returning to an already loaded pair reuses it.
+- `transformers` supports compatible Hugging Face image-text auto models; `qwen` remains a CLI alias. `openai` supports remote OpenAI-compatible vision endpoints, while `metadata` remains the no-GPU smoke test.
+- Regression command: `HF_HOME=$PWD/.cache/huggingface HF_HUB_OFFLINE=1 .venv/bin/vlm-sim ask outputs/smoke-linux64/frame.png --backend transformers --model Qwen/Qwen3-VL-2B-Instruct --prompt "Name the room type in one short phrase."`.
+- Result: `kitchen`. UI configuration, CLI alias, callback registration, Python compilation, and pytest (`1 passed`) also succeeded.

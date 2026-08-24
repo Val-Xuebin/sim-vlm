@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import threading
@@ -20,6 +21,28 @@ from .debugger import SimulatorDebugger
 
 
 DEFAULT_MODEL = "Qwen/Qwen3-VL-2B-Instruct"
+DEFAULT_MODEL_OPTIONS = {
+    "metadata": ["simulator-metadata"],
+    "transformers": [
+        DEFAULT_MODEL,
+        "Qwen/Qwen3-VL-4B-Instruct",
+    ],
+    "openai": ["gpt-4.1-mini"],
+}
+BACKEND_OPTIONS = ["metadata", "transformers", "openai"]
+
+
+def load_model_options() -> dict[str, list[str]]:
+    config_path = Path(
+        os.environ.get("VLM_SIM_MODEL_CONFIG", PROJECT_DIR / "configs" / "models.json")
+    )
+    if not config_path.is_file():
+        return DEFAULT_MODEL_OPTIONS
+    configured = json.loads(config_path.read_text(encoding="utf-8"))
+    options = {name: configured.get(name, values) for name, values in DEFAULT_MODEL_OPTIONS.items()}
+    if any(not isinstance(values, list) or not values for values in options.values()):
+        raise ValueError(f"Every backend in {config_path} must contain a non-empty model list")
+    return options
 DEFAULT_PROMPT = (
     "Analyze this embodied-agent observation. Return concise JSON with keys: "
     "scene_summary, visible_objects, spatial_relations, hazards, and recommended_action. "
@@ -106,23 +129,24 @@ KEYBOARD_JS = """
 """
 
 
-class LazyBackend:
-    """Load the expensive VLM once, only when the user requests analysis."""
+class BackendPool:
+    """Lazily load and reuse one backend instance per backend/model pair."""
 
-    def __init__(self, name: str, model: str):
-        self.name = name
-        self.model = model
-        self._backend: VLMBackend | None = None
+    def __init__(self):
+        self._backends: dict[tuple[str, str], VLMBackend] = {}
         self._lock = threading.Lock()
 
-    def get(self, metadata: dict[str, Any]) -> tuple[VLMBackend, bool]:
-        if self.name == "metadata":
-            return make_backend("metadata", self.model, metadata), False
+    def get(
+        self, name: str, model: str, metadata: dict[str, Any]
+    ) -> tuple[VLMBackend, bool]:
+        if name == "metadata":
+            return make_backend(name, model, metadata), False
+        key = (name, model)
         with self._lock:
-            loaded_now = self._backend is None
-            if self._backend is None:
-                self._backend = make_backend(self.name, self.model)
-            return self._backend, loaded_now
+            loaded_now = key not in self._backends
+            if loaded_now:
+                self._backends[key] = make_backend(name, model)
+            return self._backends[key], loaded_now
 
 
 def _agent_markdown(metadata: dict[str, Any]) -> str:
@@ -172,12 +196,17 @@ def _object_markdown(debugger: SimulatorDebugger, object_id: str | None) -> str:
     )
 
 
-def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
+def build_app(backend_name: str = "transformers", model: str | None = None):
     # Import after main() bootstraps the headless X display.
     import gradio as gr
 
     debugger = SimulatorDebugger()
-    backend = LazyBackend(backend_name, model or DEFAULT_MODEL)
+    initial_backend = "transformers" if backend_name == "qwen" else backend_name
+    if initial_backend not in BACKEND_OPTIONS:
+        raise ValueError(f"Unsupported backend: {backend_name}")
+    model_options = load_model_options()
+    initial_model = model or model_options[initial_backend][0]
+    backend_pool = BackendPool()
 
     def session_payload(selected_object: str | None = None, elapsed_ms: float = 0.0):
         if debugger.observation is None:
@@ -218,16 +247,19 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
         debugger.step(action)
         return session_payload(selected_object, (time.perf_counter() - started) * 1000)
 
-    def analyze(prompt: str):
+    def analyze(selected_backend: str, selected_model: str, prompt: str):
         if not prompt.strip():
             raise gr.Error("Enter a VLM prompt first.")
+        selected_model = selected_model.strip()
+        if not selected_model:
+            raise gr.Error("Select or enter a model first.")
         try:
             image, metadata, step = debugger.analysis_snapshot()
         except RuntimeError as exc:
             raise gr.Error(str(exc)) from exc
         started = time.perf_counter()
         try:
-            instance, loaded_now = backend.get(metadata)
+            instance, loaded_now = backend_pool.get(selected_backend, selected_model, metadata)
             answer = instance.describe(image, prompt.strip())
         except Exception as exc:  # keep the debugger usable if VLM initialization fails
             return (
@@ -236,7 +268,15 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
             )
         elapsed = time.perf_counter() - started
         load_note = " · model loaded on this request" if loaded_now else ""
-        return answer, f"Analyzed step `{step}` in `{elapsed:.2f}s`{load_note}."
+        return (
+            answer,
+            f"Analyzed step `{step}` with `{selected_backend}` / `{selected_model}` "
+            f"in `{elapsed:.2f}s`{load_note}.",
+        )
+
+    def select_backend(name: str):
+        choices = model_options[name]
+        return gr.Dropdown(choices=choices, value=choices[0], allow_custom_value=True)
 
     def select_prompt(name: str):
         return PROMPTS.get(name, DEFAULT_PROMPT)
@@ -305,9 +345,23 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
                             '↑/↓ look · C/X posture</div>'
                         )
                     with gr.Tab("VLM Copilot", id="vlm"):
+                        with gr.Row():
+                            backend_selector = gr.Dropdown(
+                                BACKEND_OPTIONS,
+                                value=initial_backend,
+                                label="Backend",
+                                interactive=True,
+                            )
+                            model_selector = gr.Dropdown(
+                                model_options[initial_backend],
+                                value=initial_model,
+                                label="Model",
+                                allow_custom_value=True,
+                                interactive=True,
+                            )
                         gr.Markdown(
-                            f"**Backend:** `{backend_name}`  ·  **Model:** `{backend.model}`\n\n"
-                            "The VLM sees RGB pixels only; oracle metadata is shown separately."
+                            "The model sees RGB pixels only; oracle metadata is shown separately. "
+                            "Model IDs may be selected from the list or entered directly."
                         )
                         preset = gr.Dropdown(
                             list(PROMPTS), value="Scene understanding", label="Analysis preset"
@@ -389,15 +443,25 @@ def build_app(backend_name: str = "qwen", model: str = DEFAULT_MODEL):
             object_inspector,
         )
         preset.change(select_prompt, preset, prompt)
-        analyze_button.click(analyze, prompt, [vlm_output, vlm_status], api_name="analyze_vlm")
+        backend_selector.change(select_backend, backend_selector, model_selector)
+        analyze_button.click(
+            analyze,
+            [backend_selector, model_selector, prompt],
+            [vlm_output, vlm_status],
+            api_name="analyze_vlm",
+        )
 
     return app
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI2-THOR embodied VLM studio")
-    parser.add_argument("--backend", choices=["qwen", "openai", "metadata"], default="qwen")
-    parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--backend",
+        choices=["transformers", "qwen", "openai", "metadata"],
+        default="transformers",
+    )
+    parser.add_argument("--model", help="Initial model; may also be selected in the UI")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=7860)
     args = parser.parse_args()
